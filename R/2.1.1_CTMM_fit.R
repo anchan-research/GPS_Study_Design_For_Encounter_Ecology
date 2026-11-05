@@ -1,6 +1,6 @@
 # fitting IOU
 
-required_packages <- c("lubridate", "dplyr", 
+required_packages <- c("lubridate", "dplyr",
                        "ctmm", "doMC", "doParallel")
 
 for (i in seq_along(required_packages)){
@@ -10,7 +10,7 @@ for (i in seq_along(required_packages)){
   }else{
     install.packages(required_packages[i])
     library(required_packages[i], character.only = T)
-  } 
+  }
 }
 
 rm(i,p);gc()
@@ -35,42 +35,42 @@ df <- read.csv("/path/to/file.csv") %>%
 
 # ******************************************************************************
 # ******************************************************************************
-# Prep ----- 
+# Prep -----
 
 # fit telemetry and semi-variance variogram
 Unique_ID_res <- unique(df$ID)
 
 # Structuring the data and creating telemetry object
 ls_tele_res <- foreach(i = seq_along(Unique_ID_res)) %dopar% {
-  
+
   # subset the data
   tt <- df %>%
     filter(ID == Unique_ID_res[i]) %>%
     filter(!duplicated(Date)) %>%
     arrange(Date) %>%
     droplevels()
-  
+
   # create a telemetry object with correct utm and save:
   tele_tmp <- as.telemetry(tt,
                            timezone = "US/Mountain",
                            projection = utm_zone)
-  
+
   # semi-variogram
   SVF <- variogram(tele_tmp)
-  
+
   # package the data for output
   list(telemetry = tele_tmp, SVF = SVF)
 }
 
 # fit model
 ctmm_res <- foreach(i = seq_along(ls_tele_res)) %dopar% {
-  
+
   # fitting IOU model without following the recommended framework
-  # but only taking the initial value from the guess for velocity 
+  # but only taking the initial value from the guess for velocity
   # and fixing the position autocorrelation to Inf using ctmm.select
   guess <- ctmm.guess(ls_tele_res[[i]]$telemetry,
                       interactive = FALSE)
-  
+
   # ctmm fitting to IOU
   ctmm_obj <- ctmm.fit(ls_tele_res[[i]]$telemetry,
                        ctmm(tau = c(Inf, summary(guess)$CI[3, 2])))

@@ -13,7 +13,7 @@ dyad_dataframe <- function(data_1, data_2, file_path, save){
   id_1 <- unique(data_1$ID)
   id_2 <- unique(data_2$ID)
   
-  time_frame <- c(pmax(min(data_1$t),min(data_2$t)),
+  time_frame <- c(pmax(min(data_1$t), min(data_2$t)),
                   pmin(max(data_1$t), max(data_2$t))
   )
   
@@ -62,8 +62,8 @@ dyad_dataframe <- function(data_1, data_2, file_path, save){
   
   # save the output
   if(save){
-    saveRDS(output, 
-            paste0(file_path,"contact_", id_1, "&", id_2, ".rds"))
+    saveRDS(output,
+            paste0(file_path, "contact_", id_1, "&", id_2, ".rds"))
   }
   
   return(output)
@@ -82,7 +82,7 @@ agreement_metric <- function(x, fix_rate, dist_scale){
     mutate(
       fission_fusion = case_when(
         # fission interaction events are 0s
-        distance > scale_cutoff ~ 0, 
+        distance > scale_cutoff ~ 0,
         # fusion interaction events are 1s
         distance <= scale_cutoff ~ 1),
     ) %>%
@@ -90,8 +90,7 @@ agreement_metric <- function(x, fix_rate, dist_scale){
     # sum conditional or not 
     summarise(sim_in_contact = sum(fission_fusion),
               sim_not_contact = 400 - sim_in_contact) %>%
-    mutate(agreement = pmax(sim_in_contact, sim_not_contact)) 
-  
+    mutate(agreement = pmax(sim_in_contact, sim_not_contact))
   
   # for each pair calculate proportion of agreement 
   out_df <- data.frame(prop_agreement = sum(agreement$agreement)/(nrow(agreement)*400),
@@ -106,7 +105,70 @@ agreement_metric <- function(x, fix_rate, dist_scale){
   return(out_df)
 }
 
+agreement_plot_function <- function(x, dist_scale, max_sim, plot_title){
+  # agreement rule
+  scale_cutoff <- dist_scale
+  
+  # data frame
+  agreement <- x %>%
+    # define contact
+    mutate(
+      fission_fusion = case_when(
+        # fission events are 0s
+        distance > scale_cutoff ~ 0,
+        # fusion events are 1s
+        distance <= scale_cutoff ~ 1),
+    ) %>%
+    group_by(t) %>%
+    # sum conditional or not
+    summarise(sim_in_contact = sum(fission_fusion),
+              sim_not_contact = max_sim - sim_in_contact) %>%
+    mutate(agreement = (pmax(sim_in_contact, sim_not_contact) - 200) * 2) 
+  
+  # plot the agreement across time 
+  # plotting only 60 days
+  agreement_1 <- agreement %>%
+    filter(t >= min(t) & t <= (min(t) + days(60)))
+  
+  plt <- ggplot(agreement_1,
+                aes(x = t)) +
+    geom_line(aes(y = agreement, color = "Agreement"),
+              alpha = 0.7,
+              linewidth = 1) +
+    geom_line(aes(y = sim_in_contact, color = "Encounter"),
+                  alpha = 0.5,
+                  linewidth = 2) +
+    scale_x_datetime(date_labels = "%b %d", 
+                     breaks = pretty_dates(agreement_1$t, n = 4)) +
+    scale_y_continuous(limits = c(0, max_sim),
+                       breaks = seq(0, max_sim, 50),
+                       name = "Number of Sims. \n in 'together' state",
+                       sec.axis = sec_axis(~. / max_sim,
+                                           name = "Proportion of \n Agreement")) +
+    theme +
+    theme(legend.position = "bottom") +
+    scale_color_manual(name = "Legend",
+      values = c("Encounter" = "red",
+                 "Agreement" = "lightblue")) +
+    labs(subtitle = plot_title)
 
+  # result
+  return(plt)
+}
 
-
-
+# example agreenment model fit ----------
+library(glmmTMB)
+mod <- glmmTMB(
+  cbind(agreement, N_agreement - agreement) ~ 
+    # fixed effects
+    mov_mode +
+    encounter_dist_scaled +
+    fix_rate_scaled +
+    encounter_dist_scaled:fix_rate_scaled +
+    # random effects
+    (1|site) +
+    (1|dyad_pair),
+  family = "binomial",
+  data = df
+)
+summary(mod)

@@ -12,7 +12,7 @@ instan_togetherness <- function(x, fix_rate, dist_scale){
     mutate(
       fission_fusion = case_when(
         # fission events are 0s
-        distance > scale_cutoff ~ 0, 
+        distance > scale_cutoff ~ 0,
         # fusion events are 1s
         distance <= scale_cutoff ~ 1),
     ) %>%
